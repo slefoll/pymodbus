@@ -67,6 +67,13 @@ class ModbusRtuFramer(ModbusFramer):
         self.decoder = decoder
         self.client = client
 
+    def _validate_unit_id(self, units, single):
+        if self._header['uid'] == 0:
+            _logger.debug("Broadcast frame detected")
+            return True
+        else:
+            return super()._validate_unit_id(self, units, single)
+
     # ----------------------------------------------------------------------- #
     # Private Helper Functions
     # ----------------------------------------------------------------------- #

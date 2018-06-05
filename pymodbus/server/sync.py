@@ -59,8 +59,14 @@ class ModbusBaseRequestHandler(socketserver.BaseRequestHandler):
         :param request: The decoded request message
         """
         try:
-            context = self.server.context[request.unit_id]
-            response = request.execute(context)
+            if request.unit_id == 0:
+                #  Broadcast requests : execute on all contexts
+                for unit_id,context in self.server.context:
+                    _logger.debug("Execute broadcast frame on unit %s" % unit_id)
+                    response = request.execute(context)
+            else:
+                context = self.server.context[request.unit_id]
+                response = request.execute(context)
         except NoSuchSlaveException as ex:
             _logger.debug("requested slave does not exist: %s" % request.unit_id )
             if self.server.ignore_missing_slaves:
@@ -71,7 +77,10 @@ class ModbusBaseRequestHandler(socketserver.BaseRequestHandler):
             response = request.doException(merror.SlaveFailure)
         response.transaction_id = request.transaction_id
         response.unit_id = request.unit_id
-        self.send(response)
+
+        if request.unit_id != 0:
+            #  No response for broadcast requests
+            self.send(response)
 
     # ----------------------------------------------------------------------- #
     # Base class implementations
