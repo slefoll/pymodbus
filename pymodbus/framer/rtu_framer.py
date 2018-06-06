@@ -216,18 +216,20 @@ class ModbusRtuFramer(ModbusFramer):
         list of unit ids (server) or single unit id(client/server)
         :param single: True or False (If True, ignore unit address validation)
         """
+        _logger.debug("Process incoming packet [{0}]".format(data))
         if not isinstance(unit, (list, tuple)):
             unit = [unit]
         self.addToFrame(data)
         single = kwargs.get("single", False)
         if self.isFrameReady():
-            if self.checkFrame():
-                if self._validate_unit_id(unit, single):
-                    self._process(callback)
-                else:
-                    _logger.debug("Not a valid unit id - {}, "
-                                  "ignoring!!".format(self._header['uid']))
-                    self.resetFrame()
+            while self.isFrameReady():
+                if self.checkFrame():
+                    if self._validate_unit_id(unit, single):
+                        self._process(callback)
+                    else:
+                        _logger.debug("Not a valid unit id - {}, "
+                                      "ignoring!!".format(self._header['uid']))
+                        self.advanceFrame()
         else:
             _logger.debug("Frame - [{}] not ready".format(data))
 
