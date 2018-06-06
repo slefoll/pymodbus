@@ -10,7 +10,11 @@ def is_exe(path):
     :param path: The path to the file
     :return: True if it is, False otherwise
     '''
-    return os.path.exists(path) and os.access(path, os.X_OK)
+    if os.path.exists(path) and os.access(path, os.X_OK):
+        return True
+    if os.path.exists(path+".exe") and os.access(path+".exe", os.X_OK):
+        return True
+    return False
 
 def which(program):
     ''' Check to see if an executable exists
