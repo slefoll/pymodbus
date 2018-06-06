@@ -64,6 +64,7 @@ class ModbusBaseRequestHandler(socketserver.BaseRequestHandler):
                 for unit_id,context in self.server.context:
                     _logger.debug("Execute broadcast frame on unit %s" % unit_id)
                     response = request.execute(context)
+                    response.should_respond = False
             else:
                 context = self.server.context[request.unit_id]
                 response = request.execute(context)
@@ -78,9 +79,7 @@ class ModbusBaseRequestHandler(socketserver.BaseRequestHandler):
         response.transaction_id = request.transaction_id
         response.unit_id = request.unit_id
 
-        if request.unit_id != 0:
-            #  No response for broadcast requests
-            self.send(response)
+        self.send(response)
 
     # ----------------------------------------------------------------------- #
     # Base class implementations

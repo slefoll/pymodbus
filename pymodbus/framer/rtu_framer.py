@@ -72,7 +72,7 @@ class ModbusRtuFramer(ModbusFramer):
             _logger.debug("Broadcast frame detected")
             return True
         else:
-            return super()._validate_unit_id(self, units, single)
+            return super()._validate_unit_id(units, single)
 
     # ----------------------------------------------------------------------- #
     # Private Helper Functions

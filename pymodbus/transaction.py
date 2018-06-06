@@ -122,6 +122,7 @@ class ModbusTransactionManager(object):
                             response_pdu_size = response_pdu_size * 2
                         if response_pdu_size:
                             expected_response_length = self._calculate_response_length(response_pdu_size)
+
                 if request.unit_id in self._no_response_devices:
                     full = True
                 else:
@@ -131,6 +132,13 @@ class ModbusTransactionManager(object):
                     full = True
                     if not expected_response_length:
                         expected_response_length = Defaults.ReadSize
+
+                if "modbusserialclient" in c_str.lower().strip():
+                    if request.unit_id == 0:
+                        _logger.debug("Broadcast request - no response expected")
+                        full = True
+                        expected_response_length = 0
+
                 response, last_exception = self._transact(request,
                                                           expected_response_length,
                                                           full=full
@@ -140,6 +148,7 @@ class ModbusTransactionManager(object):
                     self._no_response_devices.append(request.unit_id)
                 elif request.unit_id in self._no_response_devices and response:
                     self._no_response_devices.remove(request.unit_id)
+
                 if not response and self.retry_on_empty and retries:
                     while retries > 0:
                         if hasattr(self.client, "state"):
@@ -157,26 +166,29 @@ class ModbusTransactionManager(object):
                         # Remove entry
                         self._no_response_devices.remove(request.unit_id)
                         break
-                addTransaction = partial(self.addTransaction,
-                                         tid=request.transaction_id)
-                self.client.framer.processIncomingPacket(response,
-                                                         addTransaction,
-                                                         request.unit_id)
-                response = self.getTransaction(request.transaction_id)
-                if not response:
-                    if len(self.transactions):
-                        response = self.getTransaction(tid=0)
-                    else:
-                        last_exception = last_exception or (
-                            "No Response received from the remote unit"
-                            "/Unable to decode response")
-                        response = ModbusIOException(last_exception)
-                if hasattr(self.client, "state"):
-                    _logger.debug("Changing transaction state from "
-                                  "'PROCESSING REPLY' to "
-                                  "'TRANSACTION_COMPLETE'")
-                    self.client.state = (
-                        ModbusTransactionState.TRANSACTION_COMPLETE)
+
+                if expected_response_length > 0:
+                    addTransaction = partial(self.addTransaction,
+                                             tid=request.transaction_id)
+                    self.client.framer.processIncomingPacket(response,
+                                                             addTransaction,
+                                                             request.unit_id)
+                    response = self.getTransaction(request.transaction_id)
+                    if not response:
+                        if len(self.transactions):
+                            response = self.getTransaction(tid=0)
+                        else:
+                            last_exception = last_exception or (
+                                "No Response received from the remote unit"
+                                "/Unable to decode response")
+                            response = ModbusIOException(last_exception)
+                    if hasattr(self.client, "state"):
+                        _logger.debug("Changing transaction state from "
+                                      "'PROCESSING REPLY' to "
+                                      "'TRANSACTION_COMPLETE'")
+                        self.client.state = (
+                            ModbusTransactionState.TRANSACTION_COMPLETE)
+
                 return response
             except ModbusIOException as ex:
                 # Handle decode errors in processIncomingPacket method
@@ -194,6 +206,8 @@ class ModbusTransactionManager(object):
         :return: response
         """
         last_exception = None
+        result = b''
+
         try:
             self.client.connect()
             packet = self.client.framer.buildPacket(packet)
@@ -201,18 +215,24 @@ class ModbusTransactionManager(object):
                 _logger.debug("SEND: " + hexlify_packets(packet))
             size = self._send(packet)
             if size:
-                _logger.debug("Changing transaction state from 'SENDING' "
-                              "to 'WAITING FOR REPLY'")
-                self.client.state = ModbusTransactionState.WAITING_FOR_REPLY
-            result = self._recv(response_length, full)
-            if _logger.isEnabledFor(logging.DEBUG):
-                _logger.debug("RECV: " + hexlify_packets(result))
+                if response_length != 0:
+                    _logger.debug("Changing transaction state from 'SENDING' "
+                                  "to 'WAITING FOR REPLY'")
+                    self.client.state = ModbusTransactionState.WAITING_FOR_REPLY
+                    result = self._recv(response_length, full)
+                    if _logger.isEnabledFor(logging.DEBUG):
+                        _logger.debug("RECV: " + hexlify_packets(result))
+                else:
+                    _logger.debug("Changing transaction state from 'SENDING' "
+                                  "to 'TRANSACTION_COMPLETE'")
+                    self.client.state = ModbusTransactionState.TRANSACTION_COMPLETE
+
         except (socket.error, ModbusIOException,
                 InvalidMessageReceivedException) as msg:
             self.client.close()
             _logger.debug("Transaction failed. (%s) " % msg)
             last_exception = msg
-            result = b''
+
         return result, last_exception
 
     def _send(self, packet):
